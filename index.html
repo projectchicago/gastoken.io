@@ -1,0 +1,697 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>GasToken.io - Cheaper Ethereum Transactions, Today</title>
+    <meta name="description" content="The Ethereum Gas Token for banking Ethereum 'gas'">
+    <meta name="author" content="Lorenz Breidenbach, Phil Daian, Florian Tramèr">
+
+    <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+
+    <!-- favicon crap -->
+    <link rel="apple-touch-icon" sizes="57x57" href="favicon/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="favicon/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="favicon/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="favicon/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="favicon/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="favicon/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="favicon/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="favicon/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-icon-180x180.png">
+    <link rel="icon" type="imagefavicon/png" sizes="192x192"  href="favicon/android-icon-192x192.png">
+    <link rel="icon" type="imagefavicon/png" sizes="32x32" href="favicon/favicon-32x32.png">
+    <link rel="icon" type="imagefavicon/png" sizes="96x96" href="favicon/favicon-96x96.png">
+    <link rel="icon" type="imagefavicon/png" sizes="16x16" href="favicon/favicon-16x16.png">
+    <link rel="manifest" href="favicon/manifest.json">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="favicon/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}
+    });
+    </script>
+    <script type="text/javascript" async
+      src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
+
+    <script type="text/javascript">
+        "use strict";
+
+        function select_contenteditable(el) {
+            var range = document.createRange();
+            range.selectNodeContents(el);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+
+        function to_eth(gas, gas_price_in_gwei) {
+            return (gas * gas_price_in_gwei) / Math.pow(10, 9);
+        }
+
+        function add_warning(table, warning, is_error) {
+            var row = table.insertRow(-1);
+
+            // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
+            var cell = row.insertCell(0);
+
+            // Add some text to the new cells, and clear result on error.
+            if (is_error) {
+                cell.innerText = "ERROR: " + warning;
+                cell.className = "error";
+                document.getElementById("mint-cost").innerText = "";
+                document.getElementById("free-cost").innerText = "";
+                document.getElementById("tot-transac-cost").innerText = "";
+                // document.getElementById("reimbursement").innerText = "";
+                document.getElementById("savings").innerText = "";
+                document.getElementById("efficiency").innerText = "";
+            } else {
+                cell.innerText = "WARNING: " + warning;
+                cell.className = "warning";
+            }
+        }
+
+        function strict_parse_float(text) {
+            if (text.match(/^\s*([0-9]*[.])?[0-9]+\s*$/)) {
+                return parseFloat(text);
+            }
+            throw "'" + text + "' is not a valid float.";
+        }
+
+        function strict_parse_int(text) {
+            if (text.match(/^\s*[0-9]+\s*$/)) {
+                return parseInt(text);
+            }
+            throw "'" + text + "' is not a valid integer.";
+        }
+
+        function calc() {
+            var messages = document.getElementById("messages")
+
+            var rowCount = messages.rows.length;
+            for (var i = 0; i < rowCount; i++) {
+                messages.deleteRow(0);
+            }
+
+            var gst_type = document.querySelector('input[name="gst-type"]:checked').value;
+
+            var symbols = document.getElementsByClassName("token-symbol");
+            for (var i = 0; i < symbols.length; i++) {
+                symbols[i].innerText = gst_type;
+            }
+
+            if (gst_type == "GST2") {
+                var MINT_BASE = 32254;
+                var MINT_TOKEN = 36543;
+                var FREE_BASE = 14154;
+                var FREE_TOKEN = 6870;
+                var REIMBURSE = 24000;
+                document.getElementById("slots-per-token").innerText = "(1 GST2 = 100 contract slots)";
+            } else {
+                var MINT_BASE = 32259;
+                var MINT_TOKEN = 20046;
+                var FREE_BASE = 14505;
+                var FREE_TOKEN = 5046;
+                var REIMBURSE = 15000;
+                document.getElementById("slots-per-token").innerText = "(1 GST1 = 100 storage slots)";
+            }
+
+            var auto_max_token = document.querySelector('input[name="auto-max-token"]').checked;
+
+            if (auto_max_token) {
+                document.getElementById("token-num").setAttribute("contenteditable", false);
+            } else {
+                document.getElementById("token-num").setAttribute("contenteditable", true);
+            }
+
+            try {
+                var mint_gas_price = strict_parse_float(document.getElementById("mint-gas-price").innerText);
+                var free_gas_price = strict_parse_float(document.getElementById("free-gas-price").innerText);
+                var transac_cost = strict_parse_int(document.getElementById("transac-cost").innerText);
+
+                if (auto_max_token) {
+                    var token_num = 0.01 * Math.floor((transac_cost + FREE_BASE) / (2*REIMBURSE - FREE_TOKEN));
+                    document.getElementById("token-num").innerText = token_num.toFixed(2);
+                } else {
+                    var token_num = strict_parse_float(document.getElementById("token-num").innerText);
+                }
+            } catch (err) {
+                add_warning(messages, err, true);
+                return;
+            }
+
+            var mint_cost = MINT_BASE + (token_num * 100) * MINT_TOKEN;
+            var free_cost = FREE_BASE + (token_num * 100) * FREE_TOKEN;
+            var max_reimburse = (token_num * 100) * REIMBURSE;
+            var tot_transac_cost = transac_cost + free_cost;
+
+            if (max_reimburse > Math.floor(tot_transac_cost / 2)) {
+                max_reimburse = Math.floor(tot_transac_cost / 2);
+                var max_valid_free = 0.01 * Math.floor((transac_cost + FREE_BASE) / (2*REIMBURSE - FREE_TOKEN));
+                add_warning(messages, "maxing out on reimbursements! Use up to " + max_valid_free.toFixed(2) + " tokens", false);
+            }
+
+            var net_free_cost = max_reimburse - free_cost;
+
+            var mint_cost_eth = to_eth(mint_cost, mint_gas_price);
+            var net_free_cost_eth = to_eth(net_free_cost, free_gas_price);
+
+            var savings = net_free_cost_eth - mint_cost_eth;
+
+            if (savings < 0) {
+                add_warning(messages, gst_type + " is not efficient in this setting!", false);
+            }
+
+            var efficiency = (max_reimburse * free_gas_price) / (mint_cost * mint_gas_price + free_cost * free_gas_price)
+
+            document.getElementById("mint-cost").innerText = mint_cost.toFixed(0);
+            document.getElementById("free-cost").innerText = free_cost.toFixed(0);
+            document.getElementById("tot-transac-cost").innerText = (tot_transac_cost - max_reimburse).toFixed(0);
+            //document.getElementById("reimbursement").innerText = max_reimburse;
+            document.getElementById("savings").innerText = savings.toPrecision(3);
+            document.getElementById("efficiency").innerText = efficiency.toPrecision(3);
+        }
+    </script>
+
+    <!-- GitHub crap. -->
+    <script async defer src="https://buttons.github.io/buttons.js"></script>
+
+</head>
+<body onload="calc()">
+
+    <div id="header"> <a href="/"><img src="gas.png" id="logo" /></a> <h1>GasToken.io</h1> </div>
+
+    <div class="center">
+        <a class="github-button" href="https://github.com/projectchicago/gastoken" data-icon="octicon-star" data-size="large" aria-label="Star projectchicago/gastoken on GitHub">Star projectchicago/gastoken on GitHub</a>
+    </div>
+
+    <div id="content">
+        <p>
+            GasToken is a new, cutting-edge Ethereum contract that allows users to <i>tokenize gas</i> on the Ethereum network, storing <a href="https://ethereum.stackexchange.com/questions/3/what-is-meant-by-the-term-gas">gas</a> when
+            it is cheap and using / deploying this gas when it is expensive.  Using GasToken can subsidize high gas prices on transactions to do everything from
+            arbitraging decentralized exchanges to buying into ICOs early.  GasToken is also the first contract on the Ethereum network that allows users to buy and
+            sell gas directly, enabling long-term "banking" of gas that can help shield users from rising gas prices.
+
+            <h1><a class="nohighlight" href="#what-is-gas" name="what-is-gas"> What is Gas? </a></h1>
+
+            Gas is a fundamental resource in the Ethereum network.  Every transaction on the network must include some gas, and the fee paid to
+            miners for each transaction is directly proportional to the gas consumed by a transaction.  GasToken allows a transaction to do the same amount of work and
+            pay for less gas, saving on miner fees and costs and allowing users to bid higher gas prices without paying correspondingly higher fees.   Using GasToken on
+            an eligible transaction, you can save money on the Ethereum network today.
+
+            <h1><a class="nohighlight" href="#why" name="why"> Why? </a></h1>
+
+            Gas prices on Ethereum are hard to predict; they can be as cheap as 1 gwei or less at off-peak hours, while some transactions pay into the hundreds of
+            gwei to buy into that juicy ICO or hit an order on EtherDelta before any other players.  Users who need to be mined quickly or first often
+            engage in fierce bidding wars, bidding wars in which using GasToken provides an enormous advantage by letting you perform the same transactions while
+            spending less gas.
+
+            <br><br>Compounding this effect, Ethereum blocks are <a href="https://www.etherchain.org/charts/averageBlockUtilization">starting to fill up</a>, making block space ever
+            more coveted.
+
+            <h1><a class="nohighlight" href="#how" name="how"> How? </a></h1>
+
+            GasToken works by taking advantage of the <i>storage refund</i> in Ethereum.  To encourage contracts to delete storage variables (that all nodes have to
+            store forever!), Ethereum provides a refund when a storage element is deleted.  This refund can pay for up to half of the gas used by a contract
+            transaction.
+
+            <br><br> The way GasToken works is simple: you create (or <code>mint</code>) GasToken tokens by saving data into the GasToken contract's storage, when gas prices are low.  When gas prices
+            are high (during an ICO, during peak hours, whatever), you spend (or <code>free</code>) GasToken tokens by sending them back to the GasToken contract for destruction, freeing up the
+            data saved in an earlier step. This new transaction now gets a refund, making it much cheaper to execute than the same transaction that doesn't use
+            GasToken. The general mechanism of banking storage at low prices and releasing it at high prices had
+            been <a href="https://github.com/ethereum/EIPs/issues/35">previously suggested</a> for miners
+            (a miner that encounters a non-full block has incentive to fill it up with storage-filling transactions). GasToken extends this idea to all Ethereum users (not just miners) by
+            introducing a simple way of tokenizing stored gas. GasToken complies with the ERC20 token
+            standard, thus allowing free exchange of gas tokens between users.
+
+            <br><br>There are actually two versions of GasToken: one that uses storage to bank gas, and another one that banks gas by creating contracts. The latter takes advantage of the gas refund obtained when
+            deleting a whole contract. The two GasToken variants have different
+            efficiency profiles, and users should choose which is more appropriate for their use case (see: <a href="#comparison">GST1 vs. GST2</a>).
+
+            <br><br> It's a simple, powerful idea.  Use GasToken in this manner, and pay less per contract transaction than anyone else on the Ethereum network.
+
+            <h1><a class="nohighlight" href="#calculator" name="calculator"> Gas Savings Calculator </a></h1>
+
+            This simple calculator can help with using GasToken.
+            Plug in some numbers for the (low) gas cost at mint time and
+            the (high) gas cost at free time. Specify the gas cost of the transaction
+            that should benefit from GasToken savings and check how much you might save!
+            Note that the granularity of our token is in 0.01 GST1/GST2 increments.
+
+            <br><br>
+
+            <table border=3 frame=hsides rules=rows>
+            <tbody>
+            <tr>
+            <td>Gas Price at Mint Time:</td> <td class="amount" id="mint-gas-price" contenteditable="true" oninput="calc();" onfocus="select_contenteditable(this);">1</td> <td>Gwei</td>
+            </tr>
+            <tr>
+            <td>Gas Price at Free Time:</td> <td class="amount" id="free-gas-price" contenteditable="true" oninput="calc();" onfocus="select_contenteditable(this);">50</td> <td>Gwei</td>
+            </tr>
+            <tr>
+            <td>Gas used by Transaction:</td> <td class="amount" id="transac-cost" contenteditable="true" oninput="calc();" onfocus="select_contenteditable(this);">2000000</td> <td>Gas</td>
+            </tr>
+            <tr>
+            <td>Number of Tokens Minted &amp; Freed:</td> <td class="amount" id="token-num" contenteditable='true' oninput="calc();" onfocus="select_contenteditable(this);">0.48</td><td class="token-symbol"></td><td id="slots-per-token" class="tdcomment"></td>
+            </tr>
+
+            <tr class="results">
+                <td>Cost of Minting:</td><td class="amount" id="mint-cost"></td><td class="denom">Gas</td>
+            </tr>
+            <tr>
+                <td>Cost of Freeing:</td><td class="amount" id="free-cost"></td><td class="denom">Gas</td>
+            </tr>
+            <tr>
+                <td>Total Transaction Cost:</td><td class="amount" id="tot-transac-cost"></td><td class="denom">Gas</td>
+            </tr>
+            <!--<tr>
+                <td>Gas Reimbursed:</td><td class="amount" id="reimbursement"></td><td class="denom">Gas</td>
+            </tr>-->
+            <tr>
+                <td>Savings:</td><td class="amount" id="savings"></td><td class="denom">Eth</td>
+            </tr>
+            <tr>
+                <td>Efficiency:</td><td class="amount" id="efficiency"></td><td></td>
+            </tr>
+            </tbody>
+
+            <br>
+            </table>
+
+            <br>
+            <div class="center">
+                <label class="radio-inline">
+                  <input type="radio" name="gst-type" value="GST1" onchange="calc();">GST1 (storage)
+                </label>
+                <label class="radio-inline">
+                  <input type="radio" name="gst-type" value="GST2" onchange="calc();" checked>GST2 (contract)
+                </label>
+                <br>
+                <label class="container">Compute optimal number of tokens for transaction
+                    <input type="checkbox" name="auto-max-token" onchange="calc();">
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+
+            <br>
+            <table id="messages">
+            <tbody>
+            </tbody>
+            </table>
+
+            <h1><a class="nohighlight" href="#using-gst" name="using-gst"> Using GasToken </a></h1>
+
+            You can use GasToken by plugging <a href="https://raw.githubusercontent.com/projectchicago/gastoken/master/contract/GST.abi">this abi</a> into any Ethereum contract interface (<a href="https://myetherwallet.com/">myetherwallet</a>,
+            Mist, Solidity). <br><br>
+
+            GST1 is registered on ENS at gst1.gastokenio.eth, and is deployed at
+            <br><a class="nohighlight" href="https://etherscan.io/token/0x88d60255f917e3eb94eae199d827dad837fac4cb"><b class="address">0x88d60255F917e3eb94eaE199d827DAd837fac4cB</b></a>.
+            <br><br>
+
+            GST2 is registered on ENS at gst2.gastokenio.eth and is deployed at
+            <br><a class="nohighlight" href="https://etherscan.io/token/0x0000000000b3F879cb30FE243b4Dfee438691c04"><b class="address">0x0000000000b3F879cb30FE243b4Dfee438691c04</b></a>.
+            <br><br>
+
+            To create tokens (banking gas), call the mint function.  To receive a refund (deploying banked gas), call the free function.  That's all there
+            is to it, the rest is a standard ERC20.
+            <br><br>
+
+            We provide some example code that can be used to generate GasToken on the Ethereum network <a href="https://github.com/projectchicago/gastoken/tree/master/miner">here</a>.
+            Below we also show a simple code snippet for how to free tokens and use the refunds in an expensive transaction.
+            <b class="no-warranty">None of our code has been audited for security, and we do not recommend trusting funds to it without extensive evaluation.</b>
+            <br>
+
+            <br>
+            <iframe
+                src="https://ethfiddle.com/services/iframesnippet/z55h8b6wl0"
+                scrolling="no"
+                frameborder="0"
+                height="300"
+                width="300"
+                allowtransparency="true"
+                style="width: 100%; overflow: hidden;">
+            </iframe>
+
+
+            <h1><a class="nohighlight" href="#comparison" name="comparison"> GST1 vs. GST2 </a></h1>
+
+            How do the two versions of GasToken (GST1 and GST2) differ? Below we compare the most
+            salient features. More details about how some these values are obtained are in the
+            <a href="#details">next section</a>. Gas price volatility is the ratio
+            between high gas prices and low gas prices (e.g., if prices go from
+            1 gwei to 100 gwei the volatility is 100$\times$). The efficiency is the ratio between the amount
+            of ether spent to mint and free tokens, and the amount of ether saved via gas refunds.
+
+            <br><br>
+            <table border=3 frame=hsides rules=rows id="compare">
+                <tbody>
+                  <tr>
+                    <th></th>
+                    <th>GST1</th>
+                    <th>GST2</th>
+                  </tr>
+                  <tr>
+                    <td>Refund mechanism</td>
+                    <td>SSTORE (deleting storage)</td>
+                    <td>CREATE + SELFDESTRUCT (deleting contracts)</td>
+                  </tr>
+
+                  <tr>
+                    <td>Required gas price volatility</td>
+                    <td><b> $\mathbf{2.02 \times}$ </b></td>
+                    <td> $2.14 \times$ </td>
+                  </tr>
+
+                  <tr>
+                    <td>Most efficient variant when volatility is</td>
+                    <td> between $2.01$ and $3.71$ </td>
+                    <td> between $3.71$ and $\infty$ </td>
+                  </tr>
+
+                  <tr>
+                    <td>Maximal savings/efficiency</td>
+                    <td> $2.97$ </td>
+                    <td><b> $\mathbf{3.49}$ </b></td>
+                  </tr>
+
+                  <tr>
+                    <td> Room for further optimization </td>
+                    <td> Unlikely </td>
+                    <td> Probably </td>
+                  </tr>
+
+                  <tr>
+                    <td>Language</td><td>Solidity</td><td>Solidity</td>
+                  </tr>
+                </tbody>
+            </table>
+            <br>
+
+            Due to a <a href="https://github.com/ethereum/solidity/issues/2999">bug in the Solidity compiler</a>
+            that we discovered while working on GasToken, under rare circumstances, freeing GST2 tokens
+            may not yield a gas refund. Fortunately, there is a simple workaround: Whenever you call <code>free</code>, <code>freeFrom</code>, <code>freeUpTo</code>, or <code>freeFromUpTo</code> to free $n$ tokens, make sure that the call has at least $25710 + n \cdot (1148 + 5722 + 150)$ gas available.
+            <a href="https://github.com/projectchicago/gastoken/blob/master/contract/gst2_free_example.sol">This example contract</a> illustrates how to check that this condition holds. The comments in the GST2 source code contain further details.
+
+            <h1><a class="nohighlight" href="#details" name="details"> The Details </a></h1>
+
+            An obvious question is when it's efficient for a user to use GasToken in their own transactions.  Bear with us for a little math here. If you're just here for the shiny widget, <a href="#calculator">use the calculator.</a>
+
+            <br><br>
+            Writing permanent blockchain state costs a significant amount of gas. For instance, the <code>SSTORE</code> instruction currently costs 20000 gas when writing a non-zero value to storage. Erasing the storage
+            (by overwriting it with zeros) costs an additional 5000 gas, but also provides a refund of
+            15000 gas.
+
+            <br><br>Suppose we write to storage when gas has a price of $\mathit{gas}_\mathit{low}$ and redeem the token for a refund when gas prices are high, at $\mathit{gas}_\mathit{high}$. Our total expenses per storage word are:
+            \[
+            20000 \cdot \mathit{gas}_\mathit{low} + 5000 \cdot \mathit{gas}_\mathit{high} \;,
+            \]
+            and we receive a refund per word of:
+            \[
+            15000 \cdot \mathit{gas}_\mathit{high} \;.
+            \]
+
+            We could expect savings whenever $\mathit{gas}_\mathit{high} > 2\cdot \mathit{gas}_\mathit{low}$. That is, if gas prices
+            at least double between periods of low usage and periods of high usage, a storage refund could
+            be efficiently used. Moreover, in the best case, we can expect a savings/efficiency of up to $3\times$. That is, if we assume creating a GasToken is "free" (or $\mathit{gas}_\mathit{low}$ is just much lower than $\mathit{gas}_\mathit{high}$), then we are essentially paying $5000$ gas to get $15000$ in return.
+
+            <br><br> The dynamics for contract-based refunds are even a bit better (in principle). Creating a
+            new contract costs 32000 gas, whereas a <code>CALL</code> followed by a <code>SELFDESTRUCT</code> costs 700+5000 gas and refunds 24000. Thus, a savings could be achieved when $\mathit{gas}_\mathit{high} > 1.75\cdot \mathit{gas}_\mathit{low}$ and the maximal possible savings/efficiency is 4.2. This ignores some inherent hidden costs (such as the 200 gas paid per byte of the created contract), so in practice the numbers are a bit lower.
+
+            <br><br> Indeed, our GasToken token implementations don't quite reach these theoretically optimal numbers, as there is some additional work to do to keep track of the storage words or the addresses of the contracts to create and delete. Some details on how we optimized the gas cost of
+            the contract-based variant of GasToken are <a href="#GST2">below</a>.
+            Fortunately, many of the incurred costs are mostly
+            <i>independent</i> of the number of tokens minted or redeemed in a single transaction.
+            That is, the more tokens we create or free in a single transaction, the closer we'll get to
+            the optimal gas refund. <i>Keep in mind that gas refunds can pay at most for
+            half the gas cost of a transaction, so freeing more tokens is only worthwhile if we're planning on spending lots of gas to begin with</i>.
+
+            <br><br> For both GasToken variants, we can give pretty tight linear
+            upper bounds on the cost of minting and freeing $x$ tokens.
+
+            For the storage-based GasToken (GST1),
+            we have
+
+            \begin{align*}
+            \mathit{cost}_\mathit{mint}(x) &\leq 34435 + x \cdot 20046 \\
+            \mathit{cost}_\mathit{free}(x) &\leq 14505 + x \cdot 5046 \\
+            \mathit{refund}(x) &= 15000 \cdot x && \text{(up to half the gas cost of the transaction)}
+            \end{align*}
+
+            The costs break down roughly as follows. When minting tokens, we pay
+            the transaction base fee (24000 gas) and two storage words get updated
+            for bookkeeping purposes (roughly 10000 gas, assuming our balance is non-zero).
+            Every word written into the contract's storage
+            costs roughly an extra 20000 gas. When releasing tokens,
+            we'll be calling our GasToken token from within the transaction we wish
+            to save gas fees on. So we ignore the base fee here.
+            For a large number of freed storage words $x$,
+            we approach $\mathit{cost}_\mathit{mint}(x) \approx x \cdot 20046$
+            and $\mathit{cost}_\mathit{free}(x) \approx x \cdot 5046$ which is very close to the theoretical optimal
+            (we might start saving transaction fees whenever $\mathit{gas}_\mathit{high} \geq 2.02\cdot \mathit{gas}_\mathit{low}$, and approach a savings of $\frac{5046}{15000} = 2.97$ when freeing a large number of storage words at
+            extremely volatile gas prices).
+
+            <br><br> For the contract-based GasToken (GST2), we have
+
+            \begin{align*}
+            \mathit{cost}_\mathit{mint}(x) &\leq 34430 + x \cdot 36543 \\
+            \mathit{cost}_\mathit{free}(x) &\leq 14154 + x \cdot 6870 \\
+            \mathit{refund}(x) &= 24000 \cdot x && \text{(up to half the gas cost of the transaction)}
+            \end{align*}
+
+            This variant has more overhead, mostly due to computing the
+            addresses of contracts to create/delete. When creating and deleting tokens in large batches,
+            this token can be efficient when $\mathit{gas}_\mathit{high} \geq 2.14\cdot \mathit{gas}_\mathit{low}$
+            which is slightly worse than what we got with the storage version.
+            However, the savings could potentially be as high as $\frac{6870}{24000}=3.49$ in this case,
+            due to the higher refunds obtained when deleting contracts.
+            When gas variations become large enough (when $\mathit{gas}_\mathit{high}$ is over a factor of 3.71 or so larger than $\mathit{gas}_\mathit{low}$), the contract-based variant actually becomes more viable.
+            The above upper bounds for the contract-based scheme are also not quite tight, so in practice we'll probably end up saving slightly more than what we'd expect!
+
+            <br>
+            <div class="center">
+                <img src="comp.png" style="max-width: 800px; width:100%;" id="efficiency" />
+            </div>
+            <br>
+
+            A picture is worth a thousand words. The plot shows the maximal possible savings/efficiency that
+            could be attained by using either GasToken variant, as the fluctuation in gas prices increases (and assuming we free an extremely large number of tokens).
+            There is a small regime (between the dotted curves) where the storage scheme has positive efficiency
+            and beats the contract scheme. For large fluctuations, the contract-based scheme is always better.
+
+            <h1><a class="nohighlight" href="#GST2" name="GST2">GST2 Optimizations</a></h1>
+
+            On a <code>mint(x)</code> call, the GST2 variant of GasToken creates $x$ child
+            contracts. The code of the child contracts should be as small as possible,
+            as every byte of code costs an extra 200 gas when calling <code>CREATE</code>.
+            Each child contract implements the following simple functionality:
+
+            <pre><code>
+            if (msg.sender == GST2.address) {
+                SELFDESTRUCT(msg.sender);
+            }
+            </code></pre>
+
+            The address check is required to ensure that only the GasToken contract can delete
+            these child contracts. The most succinct EVM code we came up with is:
+
+            <pre><code>
+            PUSH15 0xb3f879cb30fe243b4dfee438691c04
+            CALLER
+            XOR
+            PC
+            JUMPI
+            CALLER
+            SELFDESTRUCT
+            </code></pre>
+
+            The address of our GST2 GasToken,
+            <a class="nohighlight" href="https://etherscan.io/token/0x0000000000b3F879cb30FE243b4Dfee438691c04">
+            <span class="address">0x0000000000b3F879cb30FE243b4Dfee438691c04</span></a>, is hardcoded.
+            Note that this address is very short (only 15 non-zero bytes instead of 20).
+            We generated our GasToken contract at such an address on purpose, so as
+            to save some gas when creating contracts.
+            The above child contract uses 22 bytes of code, and thus costs roughly
+            $32000 + 22\cdot200 = 36400$ gas to create (the additional overhead
+            of calling <code>mint</code> is only about 150 gas).
+            If we could make use of address <code>0x0</code> for GasToken,
+            we could save an extra 3000 gas or so for every created contract!
+            <br><br>
+
+            How do we create such a short address?
+            In Ethereum, a newly created contract's address is defined
+            as <code>KECCAK256(RLP_ENCODE([addr, nonce]))</code> where <code>addr</code> is the
+            address of the parent contract or account, <code>nonce</code> is a counter
+            that gets incremented at each contract creation, <code>RLP_ENCODE</code> is
+            <a href="https://github.com/ethereum/wiki/wiki/RLP";>Ethereum's RLP encoding</a>,
+            and <code>KECCAK256</code> is the standard hash function used in Ethereum.
+
+            <br><br>
+            Thus, to create a contract at a short address, we simply iterated through
+            public key values and small nonces until we found a pair that worked.
+            We then created an account with that public key, and generated a few
+            contracts to get the <code>nonce</code> to the right value.
+            Note that to get a hash with $k$ leading zero bytes,
+            you need to go through $2^{8k}$ pairs on average,
+            or about 1 trillion pairs in our case. Luckily, this search
+            can be performed offline / off-chain, and it has to be done just once.
+            GasToken GST2 is now deployed, don't worry about it!
+            <br><br>
+            Incidentally, we recently realized that the Ethereum Name Service
+            Registrar contract is deployed at address
+            <a class="nohighlight" href="https://etherscan.io/token/0x314159265dd8dbb310642f98f50c066173c1259b">
+                <span class="address">0x<b>314159265</b>dD8dbb310642f98f50C066173C1259b</span></a>
+            the leading 4.5 bytes of which encode $\pi$. If you know of even "rarer"
+            addresses in Ethereum (that is, with an over 5 byte
+            recognizable pattern), let us know!
+
+            <br><br>
+            Finally, when releasing tokens, our GasToken contract has to figure
+            out the addresses at which the children were created (keeping these
+            addresses in storage would be way to expensive, so we recompute them
+            on the fly). This required implementing the <code>RLP_ENCODE([addr, nonce])</code>
+            function in Solidity. Our current implementation costs about
+            500-1000 gas for values of <code>nonce</code> up to a few billion.
+            This can likely be improved, and a more efficient RLP implementation
+            could lead to a slightly better GasToken variant.
+
+            <h1><a class="nohighlight" href="#faq" name="faq"> FAQ </a></h1>
+
+            <div class="faq-q">When is the ICO?</div>
+            <div class="faq-a">
+            There's no ICO, token launch, or whatever your lawyers want to call it today.  Just start using GasToken, on the chain, right now.
+            </div>
+
+            <div class="faq-q">Who is behind this?</div> <div class="faq-a">We are a team of blockchain researchers from around the world:
+                <ul>
+                <li><a class="nohighlight" href="https://twitter.com/ethlorenz">Lorenz Breidenbach</a> (<a class="nohighlight" href="https://www.ethz.ch">ETH Zürich</a>, <a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>)</li>
+                <li><a class="nohighlight" href="http://pdaian.com">Phil Daian</a> (<a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>)</li>
+                <li><a class="nohighlight" href="http://floriantramer.com/">Florian Tramèr</a> (<a class="nohighlight" href="https://www.stanford.edu/">Stanford University</a>)</li>
+                </ul>
+                with advice, review, and support from <a class="nohighlight" href="http://www.arijuels.com/">Ari Juels</a> (<a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>, <a class="nohighlight" href="https://jacobsinstitute.org/">The Jacobs Institute</a>).
+                <br><br>
+                We offer absolutely no support, guarantees, advice, or other help with GasToken.  If you like it, use it.
+            </div>
+
+
+            <div class="faq-q">How did GasToken originate?</div> <div class="faq-a"> GasToken was originally created in September 2017, when we were investigating two questions: what is the impact of front-running on decentralized exchanges vulnerable
+            to it, and how should blockchain resources be priced ideally?  The majority of the pre-release supply of GasToken was created by <a href="http://www.initc3.org/">The Initiative for Cryptocurrencies and Contracts</a>,
+            the parent organization of GasToken.  IC3 holds a supply of GasToken for research and on-network use, and is actively using GasToken in research projects.
+            The above authors of GasToken did not hold any personal GasToken at release-time.
+            <br><br>
+            GasToken is part of a wider initiative headquartered at IC3, <a href="http://chicagoproject.io/">Project Chicago</a> for the Study of Cryptocommodities.  We believe
+            that economically speaking, all blockchains can be viewed as a two-sided market for a set of virtual resources (block space, UTXO space) backed by digital resources (computation, network bandwidth and latency, storage)
+            with physical costs (in power, space, and capital).  Project Chicago consequently aims to understand questions of how to price such resources,
+            the consequences of mispricing, and the new generation of financial instruments that can be created around these resources for price discovery.
+
+            <br><br>This includes the study
+            of oracle-based and in-protocol futures for Bitcoin block and UTXO space, and for Ethereum state and block space, as well as rigorous study of potential
+            instruments covering network resources.  It also includes the exploration of interesting technologies like GasToken, which are only possible due to
+            quirks in distributed-trust based crypto-economic mechanisms on blockchains like Ethereum.  Project Chicago is an academic project, and aims at releasing
+            publications, blog posts, and code fostering a better understanding of decentralized resource pricing.
+            <br><br>
+            To get more news on GasToken and Project Chicago, follow us on the following platforms:<br><br>
+            <!-- Place this tag where you want the button to render. -->
+            <div class="center">
+                <a class="github-button" href="https://github.com/projectchicago" data-size="large" aria-label="Follow @projectchicago on GitHub">Follow @projectchicago</a>
+
+                <a href="https://twitter.com/projectchicago_?ref_src=twsrc%5Etfw" class="twitter-follow-button" data-size="large" data-lang="en" data-dnt="true" data-show-count="false">Follow @projectchicago_</a><script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+            </div>
+
+            </div>
+
+            <div class="faq-q">Is your contract secure?</div> <div class="faq-a">Maybe.
+            <br><br>
+            We are a team of experienced Solidity developers with an intimate knowledge of the Ethereum Virtual Machine.
+            We have <a href="https://github.com/projectchicago/gastoken/blob/master/security_notes">stared at the code</a> for a long time and don't see
+            any obvious vulnerabilities. Our contract is <a href="https://github.com/projectchicago/gastoken/tree/master/test">thoroughly tested</a>, both through unit tests and through a live on-network deployment.
+            That being said, no independent audit has been or will be commissioned. We encourage you to read the code and decide for yourself whether it's
+            secure; it's quite simple!
+            <br><br>
+            <div class="no-warranty">
+            We provide this software free of charge. There is no warranty.
+            We do not assume any responsibility for bugs, vulnerabilities, or any other technical defects in the GasToken smart contracts. Use them at your own peril.
+            </div>
+            </div>
+
+            <div class="faq-q">Is your contract an investment vehicle / security / financial product?</div> <div class="faq-a"> No. We make absolutely no promises of any
+            returns, profit, or other material representations about any market properties of GasToken. GasToken is not based on any currency, asset, or other financial
+            product.  GasToken does not represent a shared enterprise, and we encourage our users to expect 0 further effort from its developers.  It is not possible
+            to obtain GasToken directly using any form of currency, digital or otherwise.<br><br> Furthermore, because the developers are active Ethereum researchers, and GasToken exploits
+            a mechanism detail of the non-finalized economic model of the platform, <b class="no-warranty">it is extremely likely that the developers of GasToken will advocate for changes to the network that render
+            GasToken unusable, irredeemable, non-fungible, and/or worthless. </b> <br><br> User beware. </div>
+
+            <div class="faq-q">Isn't this bad for the network?</div> <div class="faq-a"> There are certainly some obvious negative implications.  For example, GasToken does impose substantial
+            externalities onto the shared network storage commons, as pointed out in original <a href="https://github.com/ethereum/EIPs/issues/35">analyses of this arbitrage</a>.
+            Our belief is that the issue is somewhat more fundamental than flaws in the refund mechanism: storage, network, and other commons-based resources in blockchain networks may be severely underpriced given
+            their market value.  This means that any price discovery mechanism over these resources, including GasToken, has the potential to massively inflate the cost of such
+            resources, creating a negative user experience for ecosystem participants.
+            <br><br>
+            Furthermore, GasToken is not a perfectly efficient mechanism.  It is possible that widespread use of GasToken will waste substantial block space,  driving up
+            gas prices and in-turn driving up GasToken usage, in what has the potential to become a positive-feedback loop.  In a severe instance of such a loop, it is likely
+            the authors of GasToken will advocate for the removal of the contract-clearing or storage-clearing refunds, eliminating the market value of GasToken.
+            <br><br>
+            GasToken is, however, also a positive technology for the network, providing gas-banking services to users and correspondingly a mechanism aiding price discovery
+            on gas.  GasToken can also help users and businesses shield against increases in on-network gas pricing, ensuring that they are able to perform expected
+            transactions even in hostile markets for gas.
+            In Bitcoin, such a technology likely would have improved user experiences for <a href="https://medium.com/@jimmysong/high-fees-and-utxo-sets-474969adebd2">many services reliant on the blockchain</a>.
+            <br><br>
+            GasToken can be viewed as an economic exploit in the Ethereum gas model.  While we do not consider this a zero-day (the basic arbitrage pattern has been known since 2015) or information-security
+            exploit, we took steps to responsibly inform the Ethereum Foundation of our intent to study this problem and our actions on the blockchain several months in advance of this release.
+            </div>
+
+            <div class="faq-q">Isn't this bad for miners?</div> <div class="faq-a"> Miners that execute
+            transactions that include large gas refunds might be paid only half the fee of the same
+            transaction without a refund. Nevertheless, GasToken also helps in stabilizing
+            gas prices thus reducing the variability in miner's rewards.
+            </div>
+
+            <div class="faq-q">Doesn't [Metropolis / EIP87 / whatever] nullify this scheme?</div> <div class="faq-a"> <b class="no-warranty">It is entirely possible that the Ethereum community will, at some point,
+            decide to change consensus rules in a manner that renders GasToken inoperable.  We take no responsibility for any such events.</b> <br><br>
+            EIP87 proposes a notion of blockchain-rent, wherein contracts have to continuously pay a fee
+            to keep values in storage. Rent proposals that preserve gas refunds remain compatible with GasToken.  For example, GasToken can still be useful if the short-term rent
+            paid on storage is less than the efficiency gain from banking gas at a lower cost (so, any time there is an unpredictable gas market with high fluctuations).
+            <br><br>Moreover, even if
+            a non-refundable rental scheme for storage is adopted, an incentive for removing empty contracts
+            should remain. Introducing a rental scheme for contracts themselves
+            may be detrimental (i.e., a contract with no storage would disappear if rent isn't paid)
+            so GST2 or some variant of it is likely to remain useful.
+            </div>
+
+            <div class="faq-q">Doesn't [sharding / PoS / plasma / whatever] nullify this scheme?</div> <div class="faq-a"> Partially.  Even if Ethereum manages to effectively scale the blockchain to
+            the promised lower transaction prices, fluctuations in gas price are possible and GasToken is useful.  That being said, holding GasToken long-term
+            is obviously not economically viable if the network continues to scale and maintain low gas prices.  Also, changes to Ethereum's resource model as a consequence
+            of the above scaling strategies may directly render GasToken inoperable or unprofitable, e.g. by changing the rules surrounding the refunds GasToken exploits.
+            </div>
+
+            <div class="faq-q">What about Ethereum Classic?</div> <div class="faq-a"> Of course we support all derivatives of Ethereum.  Our GST1 and GST2 contracts are deployed at <a class="nohighlight" href="http://gastracker.io/contract/0x88d60255F917e3eb94eaE199d827DAd837fac4cB"><b class="address">0x88d60255F917e3eb94eaE199d827DAd837fac4cB</b></a>
+            and <a class="nohighlight" href="http://gastracker.io/contract/0x0000000000b3F879cb30FE243b4Dfee438691c04"><b class="address">0x0000000000b3F879cb30FE243b4Dfee438691c04</b></a> respectively on ETC.
+            <br><br>
+            The GST2 contract deployed in Ethereum Classic contains some minor differences compared
+            with the version live in Ethereum (we added a fix for the Solidity compiler bug described
+            <a href="#comparison">above</a>, as well as some extra checks and balances
+            for the <code>mint</code> function). The exact code we deployed can be found
+            <a href="https://github.com/projectchicago/gastoken/blob/master/contract/GST2_ETC.sol">
+            here</a>.
+            </div>
+        </p>
+    </div>
+
+
+    <div id="footer">
+        A project of
+        <div>
+            <a href="http://www.initc3.org/"><img width="90%" src="ic3.png" alt="IC3" /></a>
+        </div>
+        <br><br>
+        Logos licensed under Creative Commons, using elements from
+        <br><a href="https://thenounproject.com/icon/215023/">Eugene Dobrik</a>, <a href="https://thenounproject.com/icon/1102174/">Mello</a>, <a href="https://thenounproject.com/icon/984338/">Royyan Wijaya</a>
+    </div>
+
