@@ -220,8 +220,9 @@
             <h1><a class="nohighlight" href="#how" name="how"> How? </a></h1>
 
             GasToken works by taking advantage of the <i>storage refund</i> in Ethereum.  To encourage contracts to delete storage variables (that all nodes have to
-            store forever!), Ethereum provides a refund when a storage element is deleted.  This refund can pay for up to half of the gas used by a contract
-            transaction.
+            store forever!), Ethereum provides a refund when a storage element is deleted.  This refund can pay for up to half of the gas used by a <b>contract
+            transaction</b> (simple sends are not eligible for a refund, since they already use the minimum amount of gas; batched sends to contracts, however, can benefit
+            from GasToken).
 
             <br><br> The way GasToken works is simple: you create (or <code>mint</code>) GasToken tokens by saving data into the GasToken contract's storage, when gas prices are low.  When gas prices
             are high (during an ICO, during peak hours, whatever), you spend (or <code>free</code>) GasToken tokens by sending them back to the GasToken contract for destruction, freeing up the
@@ -575,7 +576,7 @@
                 <li><a class="nohighlight" href="http://pdaian.com">Phil Daian</a> (<a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>)</li>
                 <li><a class="nohighlight" href="http://floriantramer.com/">Florian Tramèr</a> (<a class="nohighlight" href="https://www.stanford.edu/">Stanford University</a>)</li>
                 </ul>
-                with advice, review, and support from <a class="nohighlight" href="http://www.arijuels.com/">Ari Juels</a> (<a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>, <a class="nohighlight" href="https://jacobsinstitute.org/">The Jacobs Institute</a>).
+                with advice, review, and support from <a class="nohighlight" href="http://www.arijuels.com/">Ari Juels</a> (<a class="nohighlight" href="https://tech.cornell.edu/">Cornell Tech</a>, <a class="nohighlight" href="http://www.initc3.org/">IC3</a>, <a class="nohighlight" href="https://tech.cornell.edu/jacobs-technion-cornell-institute/overview">The Jacobs Institute</a>).
                 <br><br>
                 We offer absolutely no support, guarantees, advice, or other help with GasToken.  If you like it, use it.
             </div>
